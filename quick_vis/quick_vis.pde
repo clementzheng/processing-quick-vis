@@ -15,7 +15,9 @@ void setup() {
 }
 
 void draw() {
-  background(255); // Change background color here
+  fill(255); // Change background color here
+  noStroke();
+  rect(0, 0, width, height);
   if (SERIAL_PORT == null) {
     setupSerial();
   } else {
@@ -36,9 +38,9 @@ void draw() {
 
 Serial SERIAL_PORT;
 float[] val = new float[0];
+int serial_port_index = 0;
 
 void setupSerial() {
-  int serial_port_index = 0;
   background(255);
   fill(0);
   textAlign(LEFT);
