@@ -9,6 +9,7 @@
 import processing.serial.*;
 
 void setup() {
+  setupSerial();
   size(1200, 800, P3D); //change width and height of windowed sketch here, comment out if you want fullscreen
   // fullScreen(P3D); //uncomment this if you want fullscreen, comment previous line
   loadObjects();
@@ -19,13 +20,9 @@ void draw() {
   fill(255); // Change background color here
   noStroke();
   rect(0, 0, width, height);
-  if (SERIAL_PORT == null) {
-    setupSerial();
-  } else {
-    readSerial();
-    updateObjects();
-    displayObjects();
-  }
+  readSerial();
+  updateObjects();
+  displayObjects();
 }
 
 
@@ -37,53 +34,40 @@ void draw() {
 //             //
 /////////////////
 
-Serial SERIAL_PORT;
-float[] val = new float[0];
-int serial_port_index = 0;
+Serial[] SERIAL_PORT;
+float[][] val;
 
 void setupSerial() {
-  background(255);
-  fill(0);
-  textAlign(LEFT);
-  text("Serial port not found", 50, 50);
-  text("Serial list:", 50, 75);
   for (int i=0; i<Serial.list().length; i++) {
-    text("["+i+"] "+Serial.list()[i], 50, 90+i*15);
+    println("["+i+"] "+Serial.list()[i], 50, 90+i*15);
   }
-  if (serial_port_index >= Serial.list().length) {
-    serial_port_index = 0;
+
+  Table serial_table = loadTable("serial.csv", "header");
+  SERIAL_PORT = new Serial[serial_table.getRowCount()];
+  int port_counter = 0;
+  for (TableRow row : serial_table.rows()) {
+    int spi = row.getInt("SERIAL_PORT_INDEX");
+    int br = row.getInt("BAUD_RATE");
+    SERIAL_PORT[port_counter] = new Serial(this, Serial.list()[spi], br);
+    port_counter++;
   }
-  try {
-    SERIAL_PORT = new Serial(this, Serial.list()[serial_port_index], 9600);
-    SERIAL_PORT.bufferUntil('\n');
-  } 
-  catch(Exception e) {
-    SERIAL_PORT = null;
-    println("SERIAL CONNECTION FAILED");
-  }
-  serial_port_index++;
 }
 
 int serial_unplugged_counter = 0;
 void readSerial() {
-  if (SERIAL_PORT.available() > 0) {
-    serial_unplugged_counter = 0;
-    String str =  SERIAL_PORT.readStringUntil('\n');
-    if (str != null) {
-      str = trim(str);
-      println(str);
-      String[] readings = str.split(" ");
-      val = new float[readings.length];
-      for (int i=0; i<readings.length; i++) {
-        val[i] = parseFloat(readings[i]);
+  val = new float[SERIAL_PORT.length][0];
+  for (int i=0; i<SERIAL_PORT.length; i++) {
+    if (SERIAL_PORT[i].available() > 0) {
+      String str =  SERIAL_PORT[i].readStringUntil('\n');
+      if (str != null) {
+        str = trim(str);
+        //println(str);
+        String[] readings = str.split(" ");
+        val[i] = new float[readings.length];
+        for (int j=0; j<readings.length; j++) {
+          val[i][j] = parseFloat(readings[j]);
+        }
       }
-    }
-  } else {
-    println("SERIAL NOT AVAILABLE");
-    serial_unplugged_counter ++;
-    if (serial_unplugged_counter > 15) {
-      serial_unplugged_counter = 0;
-      SERIAL_PORT = null;
     }
   }
 }
@@ -109,6 +93,7 @@ void loadObjects() {
   table_clicker = loadTable("clickers.csv", "header");
   for (TableRow row : table_clicker.rows()) {
     String n = row.getString("NAME");
+    int spi = row.getInt("SERIAL_PORT_INDEX");
     int si = row.getInt("SERIAL_INDEX");
     float tv = row.getFloat("TRIGGER_VAL");
     boolean in = row.getString("INVERTED").equals("TRUE") || row.getString("INVERTED").equals("true") ? true : false;
@@ -123,12 +108,13 @@ void loadObjects() {
     String ia = row.getString("IMG_ACTIVE");
     boolean sn = row.getString("SHOW_NAME").equals("TRUE") || row.getString("SHOW_NAME").equals("true") ? true : false;
     boolean sv = row.getString("SHOW_VAL").equals("TRUE") || row.getString("SHOW_VAL").equals("true") ? true : false;
-    clickers.add(new Clicker(n, si, tv, in, tog, x, y, ww, hh, cp, ca, ip, ia, sn, sv));
+    clickers.add(new Clicker(n, spi, si, tv, in, tog, x, y, ww, hh, cp, ca, ip, ia, sn, sv));
   }
 
   table_slider = loadTable("sliders.csv", "header");
   for (TableRow row : table_slider.rows()) {
     String n = row.getString("NAME");
+    int spi = row.getInt("SERIAL_PORT_INDEX");
     int si = row.getInt("SERIAL_INDEX");
     float mi = row.getFloat("MIN");
     float ma = row.getFloat("MAX");
@@ -142,12 +128,13 @@ void loadObjects() {
     color ca = unhex(row.getString("COLOR_ACTIVE"));
     boolean sn = row.getString("SHOW_NAME").equals("TRUE") || row.getString("SHOW_NAME").equals("true") ? true : false;
     boolean sv = row.getString("SHOW_VAL").equals("TRUE") || row.getString("SHOW_VAL").equals("true") ? true : false;
-    sliders.add(new Slider(n, si, mi, ma, in, dir, x, y, ww, hh, cp, ca, sn, sv));
+    sliders.add(new Slider(n, spi, si, mi, ma, in, dir, x, y, ww, hh, cp, ca, sn, sv));
   }
 
   table_grapher = loadTable("graphers.csv", "header");
   for (TableRow row : table_grapher.rows()) {
     String n = row.getString("NAME");
+    int spi = row.getInt("SERIAL_PORT_INDEX");
     int si = row.getInt("SERIAL_INDEX");
     float mi = row.getFloat("MIN");
     float ma = row.getFloat("MAX");
@@ -161,24 +148,24 @@ void loadObjects() {
     float lw = row.getFloat("LINE_WEIGHT");
     boolean sn = row.getString("SHOW_NAME").equals("TRUE") || row.getString("SHOW_NAME").equals("true") ? true : false;
     boolean sv = row.getString("SHOW_VAL").equals("TRUE") || row.getString("SHOW_VAL").equals("true") ? true : false;
-    graphers.add(new Grapher(n, si, mi, ma, hs, x, y, ww, hh, cp, ca, lw, sn, sv));
+    graphers.add(new Grapher(n, spi, si, mi, ma, hs, x, y, ww, hh, cp, ca, lw, sn, sv));
   }
 }
 
 void updateObjects() {
   for (Clicker c : clickers) {
-    if (val.length > c.serial_index) {
-      c.update(val[c.serial_index]);
+    if (val[c.serial_port_index].length > c.serial_index) {
+      c.update(val[c.serial_port_index][c.serial_index]);
     }
   }
   for (Slider s : sliders) {
-    if (val.length > s.serial_index) {
-      s.update(val[s.serial_index]);
+    if (val[s.serial_port_index].length > s.serial_index) {
+      s.update(val[s.serial_port_index][s.serial_index]);
     }
   }
   for (Grapher g : graphers) {
-    if (val.length > g.serial_index) {
-      g.update(val[g.serial_index]);
+    if (val[g.serial_port_index].length > g.serial_index) {
+      g.update(val[g.serial_port_index][g.serial_index]);
     }
   }
 }
@@ -200,6 +187,7 @@ class Clicker {
 
   float val = 0;
   String name;
+  int serial_port_index;
   int serial_index;
   float trigger_val;
   boolean inverted;
@@ -217,8 +205,9 @@ class Clicker {
   boolean ctrig = false;
   boolean ptrig = false;
 
-  Clicker(String n, int si, float tv, boolean in, boolean tog, float x, float y, float ww, float hh, color cp, color ca, String ip, String ia, boolean sn, boolean sv) {
+  Clicker(String n, int spi, int si, float tv, boolean in, boolean tog, float x, float y, float ww, float hh, color cp, color ca, String ip, String ia, boolean sn, boolean sv) {
     name = n;
+    serial_port_index = spi;
     serial_index = si;
     trigger_val = tv;
     inverted = in;
@@ -285,6 +274,7 @@ class Slider {
 
   float val = 0;
   String name;
+  int serial_port_index;
   int serial_index;
   float min = 0;
   float max = 0;
@@ -298,8 +288,9 @@ class Slider {
   boolean show_name;
   boolean show_val;
 
-  Slider(String n, int si, float mi, float ma, boolean in, String dir, float x, float y, float ww, float hh, color cp, color ca, boolean sn, boolean sv) {
+  Slider(String n, int spi, int si, float mi, float ma, boolean in, String dir, float x, float y, float ww, float hh, color cp, color ca, boolean sn, boolean sv) {
     name = n;
+    serial_port_index = spi;
     serial_index = si;
     min = mi;
     max = ma;
@@ -397,6 +388,7 @@ class Grapher {
 
   float[] val;
   String name;
+  int serial_port_index;
   int serial_index;
   float min = 0;
   float max = 0;
@@ -410,8 +402,9 @@ class Grapher {
   boolean show_name;
   boolean show_val;
 
-  Grapher(String n, int si, float mi, float ma, int hs, float x, float y, float ww, float hh, color cp, color ca, float lw, boolean sn, boolean sv) {
+  Grapher(String n, int spi, int si, float mi, float ma, int hs, float x, float y, float ww, float hh, color cp, color ca, float lw, boolean sn, boolean sv) {
     name = n;
+    serial_port_index = spi;
     serial_index = si;
     min = mi;
     max = ma;
